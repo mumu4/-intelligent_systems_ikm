@@ -103,24 +103,27 @@ class SimpleCountryCluster:
             gdp = row[0]
             health = row[2]
 
-            # --- GDP уровень ---
-            if gdp < self.gdp_low:
-                gdp_level = 0
-            elif gdp < self.gdp_high:
-                gdp_level = 1
-            else:
-                gdp_level = 2
+            score = 0
 
-            # --- Health уровень ---
-            if health < self.health_low:
-                health_level = 0
-            elif health < self.health_high:
-                health_level = 1
-            else:
-                health_level = 2
+            # GDP
+            if gdp >= self.gdp_high:
+                score += 1
+            elif gdp < self.gdp_low:
+                score -= 1
 
-            # --- объединение ---
-            cluster = gdp_level + health_level
+            # Health
+            if health >= self.health_high:
+                score += 1
+            elif health < self.health_low:
+                score -= 1
+
+            # Оставляем 3 кластера
+            if score <= -1:
+                cluster = 0
+            elif score == 0:
+                cluster = 1
+            else:
+                cluster = 2
 
             clusters.append(cluster)
 
