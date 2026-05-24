@@ -19,6 +19,10 @@ from sklearn.metrics import (
 )
 from sklearn.decomposition import PCA
 
+pd.set_option("display.max_columns", None)
+pd.set_option("display.width", 1000)
+pd.set_option("display.max_colwidth", None)
+
 os.makedirs("model", exist_ok=True)
 os.makedirs("results", exist_ok=True)
 
@@ -99,15 +103,26 @@ class SimpleCountryCluster:
             gdp = row[0]
             health = row[2]
 
-            score = 0
+            # --- GDP уровень ---
+            if gdp < self.gdp_low:
+                gdp_level = 0
+            elif gdp < self.gdp_high:
+                gdp_level = 1
+            else:
+                gdp_level = 2
 
-            if gdp > self.gdp_high:
-                score += 1
+            # --- Health уровень ---
+            if health < self.health_low:
+                health_level = 0
+            elif health < self.health_high:
+                health_level = 1
+            else:
+                health_level = 2
 
-            if health > self.health_high:
-                score += 1
+            # --- объединение ---
+            cluster = gdp_level + health_level
 
-            clusters.append(score)
+            clusters.append(cluster)
 
         return np.array(clusters)
 
@@ -199,6 +214,35 @@ print(f"\nЛучшая модель: {best_model_name}")
 best_model.fit(X_train_scaled)
 
 pred_test = best_model.predict(X_test_scaled)
+
+# ПРИМЕРЫ СТРАН ИЗ КАЖДОГО КЛАСТЕРА
+
+print("\n" + "=" * 60)
+print("ПРИМЕРЫ СТРАН ПО КЛАСТЕРАМ")
+print("=" * 60)
+
+test_countries = X_test.copy()
+test_countries["cluster"] = pred_test
+
+for cluster_num in [0, 1, 2]:
+
+    print("\n" + "-" * 60)
+    print(f"КЛАСТЕР {cluster_num}")
+    print("-" * 60)
+
+    cluster_examples = test_countries[
+        test_countries["cluster"] == cluster_num
+    ].head(5)
+
+    if len(cluster_examples) == 0:
+        print("Нет примеров")
+        continue
+
+    print(
+        cluster_examples.to_string(
+            index=True
+        )
+    )
 
 silhouette = silhouette_score(
     X_test_scaled,
