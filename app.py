@@ -1,6 +1,6 @@
 # ==============================
 # app.py
-# Веб-интерфейс диагностики диабета
+# Веб-интерфейс кластеризации стран
 # ==============================
 
 import gradio as gr
@@ -20,52 +20,64 @@ scaler = joblib.load("model/scaler.pkl")
 # Основная функция предсказания
 # ==========================================
 
-def predict_diabetes(
-    pregnancies,
-    glucose,
-    blood_pressure,
-    skin_thickness,
-    insulin,
-    bmi,
-    diabetes_pedigree,
-    age
+def predict_country_cluster(
+    gdp,
+    social_support,
+    life_expectancy,
+    freedom,
+    generosity,
+    corruption
 ):
     """
-    Предсказание вероятности диабета
-    на основе параметров пациента.
+    Определение кластера страны
+    по социально-экономическим
+    показателям.
     """
 
-    # Создаём DataFrame с правильными
-    # именами признаков как в train.py
+    # DataFrame с теми же признаками,
+    # что использовались в train.py
     data = pd.DataFrame([{
-        "preg": pregnancies,
-        "plas": glucose,
-        "pres": blood_pressure,
-        "skin": skin_thickness,
-        "insu": insulin,
-        "mass": bmi,
-        "pedi": diabetes_pedigree,
-        "age": age
+        "Logged GDP per capita": gdp,
+        "Social support": social_support,
+        "Healthy life expectancy": life_expectancy,
+        "Freedom to make life choices": freedom,
+        "Generosity": generosity,
+        "Perceptions of corruption": corruption
     }])
 
     # Масштабирование данных
     scaled_data = scaler.transform(data)
 
-    # Предсказание
-    prediction = model.predict(scaled_data)[0]
+    # Предсказание кластера
+    cluster = model.predict(scaled_data)[0]
 
-    # Возврат результата
-    if prediction == 1:
-        return (
-            "⚠️ Высокая вероятность диабета\n\n"
-            "Рекомендуется обратиться к врачу "
-            "для дополнительной диагностики."
+    # Интерпретация результата
+    cluster_descriptions = {
+        0: (
+            "🔴 Кластер 0\n\n"
+            "Страны с более низкими "
+            "социально-экономическими "
+            "показателями."
+        ),
+
+        1: (
+            "🟡 Кластер 1\n\n"
+            "Страны со средним уровнем "
+            "развития и качества жизни."
+        ),
+
+        2: (
+            "🟢 Кластер 2\n\n"
+            "Страны с высокими "
+            "социально-экономическими "
+            "показателями и высоким "
+            "уровнем жизни."
         )
+    }
 
-    return (
-        "✅ Низкая вероятность диабета\n\n"
-        "Явных признаков повышенного риска "
-        "не обнаружено."
+    return cluster_descriptions.get(
+        cluster,
+        f"Кластер: {cluster}"
     )
 
 
@@ -74,73 +86,63 @@ def predict_diabetes(
 # ==========================================
 
 demo = gr.Interface(
-    fn=predict_diabetes,
+    fn=predict_country_cluster,
 
     inputs=[
+
         gr.Number(
-            label="Количество беременностей",
-            value=0
+            label="GDP per capita",
+            info="Логарифм ВВП на душу населения",
+            value=8.0
         ),
 
         gr.Number(
-            label="Уровень глюкозы",
-            info="Концентрация глюкозы в крови",
-            value=0
+            label="Social support",
+            info="Уровень социальной поддержки",
+            value=0.8
         ),
 
         gr.Number(
-            label="Артериальное давление",
-            info="мм рт. ст.",
-            value=0
+            label="Healthy life expectancy",
+            info="Ожидаемая продолжительность жизни",
+            value=65
         ),
 
         gr.Number(
-            label="Толщина кожной складки",
-            info="мм",
-            value=0
+            label="Freedom to make life choices",
+            info="Свобода жизненного выбора",
+            value=0.7
         ),
 
         gr.Number(
-            label="Уровень инсулина",
-            info="мкЕд/мл",
-            value=0
+            label="Generosity",
+            info="Уровень щедрости общества",
+            value=0.1
         ),
 
         gr.Number(
-            label="BMI (индекс массы тела)",
-            info="Показатель соотношения роста и веса",
-            value=0
-        ),
-
-        gr.Number(
-            label="Наследственная предрасположенность к диабету",
-            info="Чем выше значение, тем сильнее семейная история диабета",
-            value=0
-        ),
-
-        gr.Number(
-            label="Возраст",
-            info="Полных лет",
-            value=0
+            label="Perceptions of corruption",
+            info="Восприятие коррупции",
+            value=0.1
         )
     ],
 
     outputs=gr.Textbox(
-        label="Результат диагностики"
+        label="Результат кластеризации"
     ),
 
-    title="🩺 Система диагностики диабета",
+    title="🌍 Кластеризация стран",
 
     description=(
-        "Введите параметры пациента, "
-        "после чего модель оценит "
-        "вероятность наличия диабета."
+        "Введите социально-экономические "
+        "показатели страны, после чего "
+        "модель определит, к какому "
+        "кластеру она относится."
     ),
 
-    submit_btn="Проверить",
+    submit_btn="Определить кластер",
     clear_btn="Очистить",
 
-    # Убираем кнопку Flag
     allow_flagging="never"
 )
 

@@ -1,6 +1,7 @@
 # ==============================
 # train.py
-# Диагностика диабета (Pima Indians Diabetes Database)
+# Кластеризация стран
+# World Happiness Report 2023
 # ==============================
 
 import numpy as np
@@ -9,285 +10,271 @@ import matplotlib.pyplot as plt
 import joblib
 import os
 
-from sklearn.datasets import fetch_openml
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    classification_report,
+    silhouette_score,
+    davies_bouldin_score
 )
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 
 os.makedirs("model", exist_ok=True)
 os.makedirs("results", exist_ok=True)
 
-# =====================================================
 # 1. ПОДГОТОВКА ДАННЫХ
-# =====================================================
 
-print("Загрузка датасета Pima Indians Diabetes...")
+df = pd.read_csv("data/WHR2023.csv")
 
-# Загружаем датасет из OpenML
-dataset = fetch_openml(name="diabetes", version=1, as_frame=True)
-
-df = dataset.frame
-
-# -----------------------------------------------------
 # Признаки (X):
-# preg, plas, pres, skin, insu, mass, pedi, age
 #
-# Целевая переменная (y):
-# class / Outcome (наличие диабета)
-# 1 = диабет
-# 0 = нет диабета
-# -----------------------------------------------------
+# Logged GDP per capita
+# Social support
+# Healthy life expectancy
+# Freedom to make life choices
+# Generosity
+# Perceptions of corruption
+#
+# Целевой переменной (y) нет,
+# так как это задача кластеризации
 
-X = df.drop(columns=["class"])
-y = df["class"]
+features = [
+    "Logged GDP per capita",
+    "Social support",
+    "Healthy life expectancy",
+    "Freedom to make life choices",
+    "Generosity",
+    "Perceptions of corruption"
+]
 
-# Преобразуем target в числа
-# Категориальный признак -> число
-mapping = {
-    "tested_positive": 1,
-    "tested_negative": 0
-}
+X = df[features].copy()
 
-y = y.map(mapping)
+# Удаляем пропуски
+X = X.dropna()
 
-# Убедимся, что признаки числовые
-X = X.astype(float)
-
-# -----------------------------------------------------
 # Масштабирование признаков
-# Вычитаем среднее и делим на стандартное отклонение
-# Это помогает моделям работать стабильнее
-# -----------------------------------------------------
 
 scaler = StandardScaler()
 
-X_train, X_test, y_train, y_test = train_test_split(
+# Делим данные:
+# 80% — обучение/проверка
+# 20% — итоговый тест
+
+X_train, X_test = train_test_split(
     X,
-    y,
     test_size=0.2,
-    random_state=42,
-    stratify=y
+    random_state=42
 )
 
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-
-# =====================================================
 # 2. СОБСТВЕННАЯ ПРОСТАЯ МОДЕЛЬ
-# =====================================================
 
-class GlucoseThresholdClassifier:
+
+class SimpleCountryCluster:
     """
     Простая модель:
-    если уровень глюкозы высокий -> диабет
-    иначе -> нет диабета
+    делит страны по GDP и
+    продолжительности жизни
     """
 
-    def __init__(self):
-        self.threshold = None
+    def fit(self, X):
 
-    def fit(self, X, y):
-        glucose = X[:, 1]
+        gdp = X[:, 0]
+        health = X[:, 2]
 
-        best_acc = 0
-        best_threshold = 0
+        self.gdp_low = np.percentile(gdp, 33)
+        self.gdp_high = np.percentile(gdp, 66)
 
-        for t in np.linspace(glucose.min(), glucose.max(), 100):
-            pred = (glucose > t).astype(int)
-            acc = np.mean(pred == y)
-
-            if acc > best_acc:
-                best_acc = acc
-                best_threshold = t
-
-        self.threshold = best_threshold
+        self.health_low = np.percentile(health, 33)
+        self.health_high = np.percentile(health, 66)
 
     def predict(self, X):
-        glucose = X[:, 1]
-        return (glucose > self.threshold).astype(int)
+
+        clusters = []
+
+        for row in X:
+
+            gdp = row[0]
+            health = row[2]
+
+            score = 0
+
+            if gdp > self.gdp_high:
+                score += 1
+
+            if health > self.health_high:
+                score += 1
+
+            clusters.append(score)
+
+        return np.array(clusters)
 
 
-# =====================================================
 # 3. ВТОРАЯ МОДЕЛЬ (СЛОЖНАЯ)
-# =====================================================
 
-rf_model = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42
+kmeans_model = KMeans(
+    n_clusters=3,
+    random_state=42,
+    n_init=10
 )
 
-simple_model = GlucoseThresholdClassifier()
+simple_model = SimpleCountryCluster()
 
+# 4. "КРОСС-ВАЛИДАЦИЯ"
 
-# =====================================================
-# 4. КРОСС-ВАЛИДАЦИЯ
-# =====================================================
+print("\nПроверка моделей...")
 
-print("\nКросс-валидация моделей...")
+n_splits = 5
 
-cv = StratifiedKFold(
-    n_splits=5,
-    shuffle=True,
-    random_state=42
-)
+simple_silhouette = []
+simple_db = []
 
-scoring = ["accuracy", "precision", "recall", "f1"]
+kmeans_silhouette = []
+kmeans_db = []
 
+for i in range(n_splits):
 
-# ---------- Random Forest ----------
-rf_scores = cross_validate(
-    rf_model,
-    X_train_scaled,
-    y_train,
-    cv=cv,
-    scoring=scoring
-)
-
-print("\nRandom Forest")
-print("Accuracy:", rf_scores["test_accuracy"].mean())
-print("Precision:", rf_scores["test_precision"].mean())
-print("Recall:", rf_scores["test_recall"].mean())
-print("F1:", rf_scores["test_f1"].mean())
-
-
-# ---------- Простая модель ----------
-simple_acc = []
-simple_precision = []
-simple_recall = []
-simple_f1 = []
-
-for train_idx, val_idx in cv.split(X_train_scaled, y_train):
-
-    X_tr = X_train_scaled[train_idx]
-    X_val = X_train_scaled[val_idx]
-
-    y_tr = y_train.iloc[train_idx]
-    y_val = y_train.iloc[val_idx]
-
-    simple_model.fit(X_tr, y_tr)
-    pred = simple_model.predict(X_val)
-
-    simple_acc.append(accuracy_score(y_val, pred))
-    simple_precision.append(
-        precision_score(y_val, pred, zero_division=0)
-    )
-    simple_recall.append(
-        recall_score(y_val, pred, zero_division=0)
-    )
-    simple_f1.append(
-        f1_score(y_val, pred, zero_division=0)
+    X_tr, X_val = train_test_split(
+        X_train_scaled,
+        test_size=0.2,
+        random_state=i
     )
 
-print("\nSimple Threshold Model")
-print("Accuracy:", np.mean(simple_acc))
-print("Precision:", np.mean(simple_precision))
-print("Recall:", np.mean(simple_recall))
-print("F1:", np.mean(simple_f1))
+    # ---------- Простая модель ----------
+    simple_model.fit(X_tr)
 
+    pred_simple = simple_model.predict(X_val)
 
-# =====================================================
+    simple_silhouette.append(
+        silhouette_score(X_val, pred_simple)
+    )
+
+    simple_db.append(
+        davies_bouldin_score(X_val, pred_simple)
+    )
+
+    # ---------- KMeans ----------
+    kmeans_model.fit(X_tr)
+
+    pred_kmeans = kmeans_model.predict(X_val)
+
+    kmeans_silhouette.append(
+        silhouette_score(X_val, pred_kmeans)
+    )
+
+    kmeans_db.append(
+        davies_bouldin_score(X_val, pred_kmeans)
+    )
+
+print("\nSimple Rule Model")
+print("Silhouette Score:",
+      np.mean(simple_silhouette))
+print("Davies-Bouldin Score:",
+      np.mean(simple_db))
+
+print("\nKMeans")
+print("Silhouette Score:",
+      np.mean(kmeans_silhouette))
+print("Davies-Bouldin Score:",
+      np.mean(kmeans_db))
+
 # 5. ВЫБОР ЛУЧШЕЙ МОДЕЛИ
-# =====================================================
 
-rf_f1 = rf_scores["test_f1"].mean()
-simple_f1_avg = np.mean(simple_f1)
+simple_score = np.mean(simple_silhouette)
+kmeans_score = np.mean(kmeans_silhouette)
 
-if rf_f1 > simple_f1_avg:
-    best_model = rf_model
-    best_model_name = "Random Forest"
+if kmeans_score > simple_score:
+    best_model = kmeans_model
+    best_model_name = "KMeans"
 else:
     best_model = simple_model
-    best_model_name = "Glucose Threshold Model"
+    best_model_name = "Simple Rule Model"
 
 print(f"\nЛучшая модель: {best_model_name}")
 
-
-# =====================================================
 # 6. ФИНАЛЬНОЕ ОБУЧЕНИЕ
-# =====================================================
 
-best_model.fit(X_train_scaled, y_train)
+best_model.fit(X_train_scaled)
 
 pred_test = best_model.predict(X_test_scaled)
 
-acc = accuracy_score(y_test, pred_test)
-precision = precision_score(y_test, pred_test)
-recall = recall_score(y_test, pred_test)
-f1 = f1_score(y_test, pred_test)
+silhouette = silhouette_score(
+    X_test_scaled,
+    pred_test
+)
+
+db_score = davies_bouldin_score(
+    X_test_scaled,
+    pred_test
+)
 
 print("\n=== Итоговый тест ===")
-print("Accuracy:", acc)
-print("Precision:", precision)
-print("Recall:", recall)
-print("F1:", f1)
+print("Silhouette Score:",
+      silhouette)
 
-print("\nClassification Report:")
-print(classification_report(y_test, pred_test))
+print("Davies-Bouldin Score:",
+      db_score)
 
+# 7. ВИЗУАЛИЗАЦИЯ КЛАСТЕРОВ
 
-# =====================================================
-# 7. АНАЛИЗ ОШИБОК
-# =====================================================
+pca = PCA(n_components=2)
 
-cm = confusion_matrix(y_test, pred_test)
+X_pca = pca.fit_transform(X_test_scaled)
 
-plt.figure(figsize=(6, 5))
-plt.imshow(cm)
+plt.figure(figsize=(8, 6))
 
-plt.title("Confusion Matrix")
-plt.colorbar()
+scatter = plt.scatter(
+    X_pca[:, 0],
+    X_pca[:, 1],
+    c=pred_test
+)
 
-plt.xticks([0, 1], ["No Diabetes", "Diabetes"])
-plt.yticks([0, 1], ["No Diabetes", "Diabetes"])
+plt.title("Country Clusters")
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
 
-for i in range(2):
-    for j in range(2):
-        plt.text(j, i, cm[i, j],
-                 ha="center",
-                 va="center")
+plt.savefig(
+    "results/cluster_visualization.png"
+)
 
-plt.xlabel("Predicted")
-plt.ylabel("Real")
-
-plt.savefig("results/confusion_matrix.png")
 plt.close()
 
+# Какие страны чаще попадают в один кластер
 
-# Какие ошибки чаще?
-fp = cm[0, 1]
-fn = cm[1, 0]
+cluster_counts = pd.Series(
+    pred_test
+).value_counts()
 
-if fn > fp:
-    confusion_text = "больных людей со здоровыми"
-else:
-    confusion_text = "здоровых людей с больными"
+most_common_cluster = cluster_counts.idxmax()
 
-
-# =====================================================
 # 8. СОХРАНЕНИЕ МОДЕЛИ
-# =====================================================
 
-joblib.dump(best_model, "model/saved_model.pkl")
-joblib.dump(scaler, "model/scaler.pkl")
+joblib.dump(
+    best_model,
+    "model/saved_model.pkl"
+)
+
+joblib.dump(
+    scaler,
+    "model/scaler.pkl"
+)
 
 print("\nМодель сохранена.")
 
-
-# =====================================================
 # 9. ИТОГОВЫЙ ОТЧЁТ
-# =====================================================
 
 print("\n===================================")
 print(f"Лучшая модель — {best_model_name}")
-print(f"Ключевая метрика F1 на новых данных — {f1:.3f}")
-print(f"Чаще всего модель путает {confusion_text}")
+print(
+    f"Silhouette Score "
+    f"на новых данных — "
+    f"{silhouette:.3f}"
+)
+print(
+    f"Чаще всего страны "
+    f"попадают в кластер "
+    f"{most_common_cluster}"
+)
 print("===================================")
