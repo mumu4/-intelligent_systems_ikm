@@ -8,17 +8,13 @@ import pandas as pd
 import joblib
 
 
-# ==========================================
 # Загрузка обученной модели
-# ==========================================
 
 model = joblib.load("model/saved_model.pkl")
 scaler = joblib.load("model/scaler.pkl")
 
 
-# ==========================================
 # Основная функция предсказания
-# ==========================================
 
 def predict_country_cluster(
     gdp,
@@ -34,8 +30,7 @@ def predict_country_cluster(
     показателям.
     """
 
-    # DataFrame с теми же признаками,
-    # что использовались в train.py
+    # DataFrame с теми же признаками, что использовались в train.py
     data = pd.DataFrame([{
         "Logged GDP per capita": gdp,
         "Social support": social_support,
@@ -81,9 +76,7 @@ def predict_country_cluster(
     )
 
 
-# ==========================================
 # Создание интерфейса Gradio
-# ==========================================
 
 demo = gr.Interface(
     fn=predict_country_cluster,
@@ -146,10 +139,6 @@ demo = gr.Interface(
     allow_flagging="never"
 )
 
-
-# ==========================================
-# Точка входа
-# ==========================================
 
 def main():
     """
