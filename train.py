@@ -220,9 +220,7 @@ pred_test = best_model.predict(X_test_scaled)
 
 # ПРИМЕРЫ СТРАН ИЗ КАЖДОГО КЛАСТЕРА
 
-print("\n" + "=" * 60)
-print("ПРИМЕРЫ СТРАН ПО КЛАСТЕРАМ")
-print("=" * 60)
+print("\nПРИМЕРЫ СТРАН ПО КЛАСТЕРАМ")
 
 test_countries = X_test.copy()
 test_countries["cluster"] = pred_test
@@ -231,7 +229,6 @@ for cluster_num in [0, 1, 2]:
 
     print("\n" + "-" * 60)
     print(f"КЛАСТЕР {cluster_num}")
-    print("-" * 60)
 
     cluster_examples = test_countries[
         test_countries["cluster"] == cluster_num
@@ -312,8 +309,7 @@ print("\nМодель сохранена.")
 
 # 9. ИТОГОВЫЙ ОТЧЁТ
 
-print("\n===================================")
-print(f"Лучшая модель — {best_model_name}")
+print(f"\nЛучшая модель — {best_model_name}")
 print(
     f"Silhouette Score "
     f"на новых данных — "
@@ -324,4 +320,3 @@ print(
     f"попадают в кластер "
     f"{most_common_cluster}"
 )
-print("===================================")
